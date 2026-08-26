@@ -10,16 +10,16 @@ Edit the CONFIGURATION section below to control:
 Each run produces one directory under OUTPUT_ROOT, mirroring the original
 test structure:
     domain-shift/
-    └── augmented_test/
-        ├── test_blur/
-        │   ├── bent/                  ← n augmented images
-        │   ├── color/
-        │   ├── flip/
-        │   ├── good/
-        │   ├── scratch/
-        │   └── augmentation_log.json  ← one file documenting all params
-        ├── test_exposure/
-        └── ...
+    '-- augmented_test/
+        |-- test_blur/
+        │   ├-- bent/                  <- n augmented images
+        │   ├-- color/
+        │   ├-- flip/
+        │   ├-- good/
+        │   ├-- scratch/
+        │   └-- augmentation_log.json  <- one file documenting all params
+        |-- test_exposure/
+        '-- ...
 
 """
 
@@ -48,9 +48,9 @@ from domain_shift_functions import (
     VALID_EXTS,
 )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# CONFIGURATION — edit this section
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
+# CONFIGURATION - edit this section
+# ------------------------------------------------------------------------------
 
 # Root of the project (parent of domain-shift/)
 ROOT = Path(__file__).parent.parent
@@ -61,7 +61,7 @@ INPUT_DIR = ROOT / "data" / "metal_nut" / "test"
 # Output: all augmented sets go here, original data is never touched
 OUTPUT_ROOT = Path(__file__).parent / "metal_nut_augmented" / "test"
 
-# Random seed — controls which images are sampled, not the augmentation params
+# Random seed - controls which images are sampled, not the augmentation params
 # (augmentation params have their own seed = SEED + 1)
 SEED = 42
 
@@ -77,7 +77,7 @@ N_IMAGES = 20
 # are applied deterministically given the augmentation seed.
 #
 # To test a single transform in isolation, put only one function in the list.
-# To test a combination, put multiple — they run left to right.
+# To test a combination, put multiple - they run left to right.
 
 RUNS = {
     "test_exposure":    [apply_exposure],
@@ -99,9 +99,9 @@ RUNS = {
     #"test_optical":     [apply_blur,     apply_vignette,     apply_jpeg],
 }
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Helpers 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 def _load(path: Path) -> np.ndarray:
     img = cv2.imread(str(path))
@@ -143,9 +143,9 @@ def _apply_chain(img: np.ndarray,
     return out, all_params
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Main
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 def main() -> None:
     if not INPUT_DIR.exists():
@@ -179,7 +179,7 @@ def main() -> None:
             out_class_dir = out_dir / cls
 
             if not class_dir.exists():
-                print(f"    [!] {cls} not found — skipping.")
+                print(f"    [!] {cls} not found - skipping.")
                 continue
 
             images = _sample(class_dir, N_IMAGES, sample_rng)
@@ -209,8 +209,8 @@ def main() -> None:
             json.dumps(log_entry, indent=2)
         )
 
-        print(f"    {'total':12s} {total:3d} images → {out_dir}")
-        print(f"    log      → augmentation_log.json\n")
+        print(f"    {'total':12s} {total:3d} images -> {out_dir}")
+        print(f"    log      -> augmentation_log.json\n")
     print("Done.")
 
 

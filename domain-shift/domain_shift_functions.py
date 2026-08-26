@@ -40,9 +40,9 @@ def apply_exposure(img: np.ndarray, rng: random.Random) -> tuple[np.ndarray, dic
     Simulate exposure variation via linear scaling.
     NEW_PIXEL = alpha * OLD_PIXEL + beta
 
-    alpha < 1  → under-exposure (e.g. insufficient light, fast shutter)
-    alpha > 1  → over-exposure (e.g. blown highlights, long exposure)
-    beta       → additive offset (dark current / ambient offset)
+    alpha < 1  -> under-exposure (e.g. insufficient light, fast shutter)
+    alpha > 1  -> over-exposure (e.g. blown highlights, long exposure)
+    beta       -> additive offset (dark current / ambient offset)
 
     Industrial case: line lighting intensity varies with voltage
     fluctuations, lamp aging, and controller settings.
@@ -57,8 +57,8 @@ def apply_gamma(img: np.ndarray, rng: random.Random) -> tuple[np.ndarray, dict]:
     """
     Gamma correction to simulate different sensor response curves.
 
-    gamma < 1  → image brightened (as if sensor is more sensitive)      -- lifts shadows/midtones
-    gamma > 1  → image darkened         -- compresses shadows/midtones
+    gamma < 1  -> image brightened (as if sensor is more sensitive)      -- lifts shadows/midtones
+    gamma > 1  -> image darkened         -- compresses shadows/midtones
 
     Industrial case: different camera models (or firmware versions)
     apply different gamma tables in-sensor. 
@@ -84,7 +84,7 @@ def apply_white_balance(img: np.ndarray, rng: random.Random) -> tuple[np.ndarray
     preset introduces a colour cast.
     Plausible range: per-channel scale ∈ [0.75, 1.25]
     """
-    warm = rng.random() > 0.5          # True → warm cast, False → cool cast
+    warm = rng.random() > 0.5          # True -> warm cast, False -> cool cast
 
     scale_G = rng.uniform(0.90, 1.10)
     scale_R = rng.uniform(1.10, 1.40) if warm else rng.uniform(0.70, 0.90)
@@ -136,7 +136,7 @@ def apply_jpeg(img: np.ndarray, rng: random.Random) -> tuple[np.ndarray, dict]:
     """
     Simulate JPEG compression artifacts by encoding and re-decoding.
 
-    Lower quality → stronger block artifacts (8×8 DCT blocks visible).
+    Lower quality -> stronger block artifacts (8×8 DCT blocks visible).
 
     Industrial case: images transmitted over network links (GigE
     Vision with software compression, or IP cameras) are often JPEG-encoded.
@@ -502,6 +502,6 @@ def sample_images(class_dir: Path, n, rng: random.Random) -> list[Path]:
     n = int(n)
     if n >= len(all_imgs):
         print(f"    [!] Requested {n} but only {len(all_imgs)} available "
-              f"in {class_dir.name} — using all.")
+              f"in {class_dir.name} - using all.")
         return all_imgs
     return rng.sample(all_imgs, n)
