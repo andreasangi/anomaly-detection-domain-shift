@@ -4,6 +4,8 @@ An industrial image anomaly detection and localization project based on **ResNet
 
 The system is trained using only defect-free images and is evaluated on the **metal_nut** category of the **MVTec AD** dataset.
 
+The full project report is available here: [Report.pdf](./Report.pdf)
+
 ## Overview
 
 The pipeline consists of:
@@ -36,7 +38,9 @@ The original training set contains only normal images and is divided into:
 
 ## Domain Shift
 
-The robustness of the anomaly detector is also evaluated under different acquisition conditions.
+The robustness of the anomaly detector is also evaluated under different
+acquisition conditions, simulating variations that can occur in a real
+industrial camera setup.
 
 The main transformations considered are:
 
@@ -46,7 +50,20 @@ The main transformations considered are:
 * Contrast modifications
 * Perspective transformations
 
-These transformations simulate realistic variations in illumination, sensor quality, and camera viewpoint without introducing new defects.
+These transformations simulate realistic variations in illumination, sensor
+quality, and camera viewpoint without introducing new defects. All
+parameters are randomly sampled within physically motivated ranges for each
+transformation. During domain shift evaluation, the ResNet-50 feature
+extractor, memory bank, and anomaly threshold remain unchanged: no
+additional training or calibration is performed on the shifted images.
+
+A broader set of transforms (gamma correction, JPEG compression, motion and
+defocus blur, vignetting, and specular highlights) was also implemented but
+not included in the final evaluation, since the selected five already cover
+the main sources of domain shift relevant to this scenario.
+
+See [Perturbation Details](#perturbation-details) below for the model and
+parameter ranges used for each transformation.
 
 ## Repository Structure
 
@@ -126,6 +143,66 @@ On the original `metal_nut` test set, the final configuration achieved:
 | F1-score  |  94.5% |
 
 The system also generates anomaly heatmaps that highlight the regions most strongly associated with detected defects.
+
+## Perturbation Details
+
+Each perturbation is implemented as a physically motivated transformation,
+with parameters randomly sampled within a plausible range for industrial
+acquisition conditions.
+
+### Exposure
+
+Simulates a linear sensor response shift: `new_pixel = alpha * old_pixel + beta`.
+`alpha < 1` models under-exposure (e.g. fast shutter, low light), `alpha > 1`
+models over-exposure. Reproduces incorrect shutter timing, lamp aging, and
+voltage fluctuations in industrial lighting.
+**Range:** `alpha ∈ [0.5, 1.7]`, `beta ∈ [-30, 30]`
+
+### White Balance
+
+Applies independent per-channel scaling to the R and B channels, with the G
+channel kept close to stable (cameras are designed around the green
+channel). Reproduces the switch between different lighting technologies
+(fluorescent, LED, halogen), which shift the color temperature of the
+scene.
+**Range:** per-channel scale `∈ [0.70, 1.40]`
+
+### Noise
+
+Combines Gaussian read noise with salt-and-pepper dead/hot pixels, applied
+together to model a single sensor acquisition. Gaussian sigma reproduces
+thermal/read noise at high gain (low light); the salt-and-pepper fraction
+reproduces permanently defective pixels on aging sensors.
+**Range:** Gaussian `sigma ∈ [5, 40]`, defective pixel fraction `∈ [0, 0.005]`
+
+### Contrast
+
+Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) on the L
+channel in LAB color space, producing a spatially non-uniform contrast
+adjustment rather than a simple global one. Reproduces differing AGC/AES
+histogram modes and tone-curve settings between camera units.
+**Range:** clip limit `∈ [2.0, 6.0]`, tile size `∈ {8, 16, 32}`
+
+### Perspective
+
+Builds a homography from explicit physical camera pitch and roll angles
+(pinhole camera model), so the warp corresponds to a real camera position
+rather than an arbitrary distortion. Reproduces a camera remounted with a
+slight tilt after maintenance, or a fixture that is not perfectly level.
+**Range:** pitch, roll `∈ [-15°, 15°]`, sampled independently
+
+### Other implemented transforms (not evaluated)
+
+* **Gamma correction** — reproduces a misconfigured or replaced camera with
+  a different tone curve.
+* **JPEG compression** — reproduces bandwidth-limited camera links or
+  on-device compression.
+* **Blur (motion + defocus)** — reproduces vibration during exposure or
+  object height variation on the conveyor.
+* **Vignetting** — reproduces uneven lens illumination toward the image
+  borders.
+* **Specular highlights** — reproduce glare on glossy metal surfaces,
+  relevant for `metal_nut` and similar reflective categories.
 
 ## Authors
 
