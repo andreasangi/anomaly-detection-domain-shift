@@ -132,3 +132,27 @@ The system also generates anomaly heatmaps that highlight the regions most stron
 * Andrea Sangineto
 * Elia Francesco Vigè
 * Matteo De Marco
+
+## Citations & Licenses
+
+This project builds on the following external resources:
+
+* **Dataset**: MVTec AD [1], released under
+  [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+  Used here for academic, non-commercial purposes only.
+* **Feature extractor**: ResNet-50 [2], pre-trained on ImageNet [3],
+  provided via `torchvision` (BSD-3-Clause).
+* **Method**: PatchCore [4], re-implemented here based on the original paper.
+  The official implementation is available at
+  [amazon-science/patchcore-inspection](https://github.com/amazon-science/patchcore-inspection)
+  (Apache-2.0).
+* **Domain shift evaluation**: perturbation design informed by [5].
+
+[1] P. Bergmann, M. Fauser, D. Sattlegger, and C. Steger. *MVTec AD — A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection.* CVPR, 2019.
+[2] K. He, X. Zhang, S. Ren, and J. Sun. *Deep Residual Learning for Image Recognition.* CVPR, 2016.
+[3] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. *ImageNet: A Large-Scale Hierarchical Image Database.* CVPR, 2009.
+[4] K. Roth, L. Pemula, J. Zepeda, B. Schölkopf, T. Brox, and P. Gehler. *Towards Total Recall in Industrial Anomaly Detection.* CVPR, 2022.
+[5] Z. Zhang, Z. Zhao, X. Zhang, C. Sun, and X. Chen. *Industrial Anomaly Detection with Domain Shift: A Real-World Dataset and Masked Multi-Scale Reconstruction.* Computers in Industry, 151:103990, 2023.
+
+This repository does not redistribute the MVTec AD dataset. Users must
+download it directly from MVTec and agree to its license terms.
