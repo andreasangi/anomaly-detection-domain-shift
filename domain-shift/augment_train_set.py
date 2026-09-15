@@ -7,6 +7,9 @@ The input is a single flat folder of good images (train/good)
 For each input image, one random enabled transform is selected by default.
 Set AUGMENTATIONS_PER_IMAGE > 1 to generate more augmented copies per image.
 
+Augmentation uses a narrower parameter range than the domain-shift test
+sets, controlled by AUGMENTATION_SCALE
+
 Edit the CONFIGURATION section below to control:
   - which transforms to run
   - how many images to sample (None = all)
@@ -69,6 +72,12 @@ OUTPUT_DIR = Path(__file__).parent / "metal_nut_augmented" / "train" / "good"
 # 1 = one random transform per image, 2 = two random transforms per image, ecc...
 AUGMENTATIONS_PER_IMAGE = 1
 
+# Shrinks each transform's parameter range around its midpoint before
+# sampling, so augmentation uses a softer version of the same perturbation
+# used at test time. 1.0 = same range as the test set (no shrink).
+# ex. 0.6 = 60% of the original width
+AUGMENTATION_SCALE = 0.6
+
 # Number of images to sample. Set to None to augment all available images,
 # which is the usual choice here since every normal image should get an
 # augmented counterpart in the memory bank / threshold pool.
@@ -77,6 +86,12 @@ N_IMAGES = None
 # Random seed: controls which images are sampled, not the augmentation params
 # (augmentation params have their own seed = SEED + 1)
 SEED = 42
+
+# *Optional* per-transform overrides: if a specific transform needs a
+# different scale than the global default above. 
+# !! Leave empty to apply AUGMENTATION_SCALE uniformly to every transform.
+# ex. SCALE_OVERRIDES = {"contrast": 0.4}
+SCALE_OVERRIDES: dict[str, float] = {}
 
 
 # Transforms available for random selection.
@@ -88,6 +103,7 @@ TRANSFORMS = {
     "noise":       [apply_noise],
     "contrast":    [apply_contrast],
     "perspective": [apply_perspective],
+    "specular":    [apply_specular],
 
     # Not evaluated in the domain-shift table, kept here for completeness
     # if the pool needs to be extended later.
@@ -97,7 +113,6 @@ TRANSFORMS = {
     #"vignette":    [apply_vignette],
     #"shadow":      [apply_shadow],
     #"affine":      [apply_affine],
-    #"specular":    [apply_specular],
 }
 
 # ------------------------------------------------------------------------------
@@ -130,14 +145,15 @@ def _sample(image_dir: Path, n, rng: random.Random) -> list[Path]:
 
 def _apply_chain(img: np.ndarray,
                  fns: list,
-                 aug_rng: random.Random) -> tuple[np.ndarray, dict]:
+                 aug_rng: random.Random,
+                 scale: float) -> tuple[np.ndarray, dict]:
     """Apply a list of transform functions in sequence, collecting all params."""
     out        = img.copy()
     fn_names   = [fn.__name__.replace("apply_", "") for fn in fns]
-    all_params = {"transforms_applied": fn_names}
+    all_params = {"transforms_applied": fn_names, "scale": scale}
 
     for fn in fns:
-        out, p = fn(out, aug_rng)
+        out, p = fn(out, aug_rng, scale)
         name   = fn.__name__.replace("apply_", "")
         all_params[name] = p
 
@@ -171,7 +187,9 @@ def main() -> None:
     print(f"\nInput  : {INPUT_DIR}")
     print(f"Output : {OUTPUT_DIR}")
     print(f"Seed   : {SEED}   n_images: {N_IMAGES or 'all'}")
-    print(f"Augmentations per image: {AUGMENTATIONS_PER_IMAGE}\n")
+    print(f"Augmentations per image: {AUGMENTATIONS_PER_IMAGE}")
+    print(f"Augmentation scale: {AUGMENTATION_SCALE}"
+          f"{'  overrides: ' + str(SCALE_OVERRIDES) if SCALE_OVERRIDES else ''}\n")
 
     images = _sample(INPUT_DIR, N_IMAGES, sample_rng)
     if not images:
@@ -194,7 +212,8 @@ def main() -> None:
         selected = selected[:AUGMENTATIONS_PER_IMAGE]
 
         for aug_idx, transform_name in enumerate(selected, start=1):
-            aug, params = _apply_chain(img, TRANSFORMS[transform_name], aug_rng)
+            scale = SCALE_OVERRIDES.get(transform_name, AUGMENTATION_SCALE)
+            aug, params = _apply_chain(img, TRANSFORMS[transform_name], aug_rng, scale)
 
             output_name = (
                 f"{src.stem}_aug{aug_idx:02d}_{transform_name}{src.suffix.lower()}"
@@ -213,6 +232,8 @@ def main() -> None:
         "augmentations_per_image": AUGMENTATIONS_PER_IMAGE,
         "n_augmented_images": len(images) * AUGMENTATIONS_PER_IMAGE,
         "available_transforms": transform_names,
+        "augmentation_scale": AUGMENTATION_SCALE,
+        "scale_overrides": SCALE_OVERRIDES,
         "seed": SEED,
         "input_dir": str(INPUT_DIR),
         "output_dir": str(OUTPUT_DIR),
