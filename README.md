@@ -1,10 +1,38 @@
 # Industrial Anomaly Detection under Domain Shift
 
-An industrial image anomaly detection and localization project based on **ResNet-50** and a **PatchCore-based approach**.
+An industrial image anomaly detection and localization system based on **ResNet-50** and **PatchCore**. This project evaluates the model's robustness against domain shifts—such as lighting variations, sensor noise, and perspective distortions—and proposes a memory bank augmentation strategy for mitigation.
 
-The system is trained using only defect-free images and is evaluated on the **metal_nut** category of the **MVTec AD** dataset.
-
+The system is trained in an unsupervised manner using only defect-free images and evaluated on the **metal_nut** category of the **MVTec AD** dataset.
 The full project report is available here: [Report.pdf](./Report.pdf)
+
+## Table of Contents
+
+- [Industrial Anomaly Detection under Domain Shift](#industrial-anomaly-detection-under-domain-shift)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Dataset](#dataset)
+  - [Domain Shift](#domain-shift)
+  - [Robustness Mitigation](#robustness-mitigation)
+    - [Baseline Results](#baseline-results)
+    - [Results After Full-Range Augmentation](#results-after-full-range-augmentation)
+    - [Results After Mild (0.6) Augmentation and Generalization Test](#results-after-mild-06-augmentation-and-generalization-test)
+  - [Repository Structure](#repository-structure)
+    - [`patchcore.ipynb`](#patchcoreipynb)
+    - [`domain-shift/`](#domain-shift-1)
+  - [Requirements](#requirements)
+  - [Usage](#usage)
+  - [Results](#results)
+  - [Perturbation Details](#perturbation-details)
+    - [Exposure](#exposure)
+    - [White Balance](#white-balance)
+    - [Noise](#noise)
+    - [Contrast](#contrast)
+    - [Perspective](#perspective)
+    - [Specular Highlights](#specular-highlights)
+    - [Held-out transforms (evaluated, not used for memory bank augmentation)](#held-out-transforms-evaluated-not-used-for-memory-bank-augmentation)
+    - [Other implemented transforms (not evaluated at all)](#other-implemented-transforms-not-evaluated-at-all)
+  - [Authors](#authors)
+  - [Citations \& Licenses](#citations--licenses)
 
 ## Overview
 
@@ -25,7 +53,7 @@ The project uses the **MVTec Anomaly Detection (MVTec AD)** dataset, focusing on
 
 The dataset contains:
 
-* `good` — defect-free samples
+* `good` - defect-free samples
 * `bent`
 * `color`
 * `flip`
@@ -33,37 +61,153 @@ The dataset contains:
 
 The original training set contains only normal images and is divided into:
 
-* **80% training** — used to build the memory bank
-* **20% validation** — used to determine the anomaly threshold
+* **80% training** - used to build the memory bank
+* **20% validation** - used to determine the anomaly threshold
 
 ## Domain Shift
 
-The robustness of the anomaly detector is also evaluated under different
+The robustness of the anomaly detector is evaluated under different
 acquisition conditions, simulating variations that can occur in a real
 industrial camera setup.
 
-The main transformations considered are:
+Six transformations were used for the core robustness evaluation and for
+memory bank mitigation:
 
 * Exposure changes
 * White balance variations
 * Gaussian and salt-and-pepper noise
 * Contrast modifications
 * Perspective transformations
+* Specular highlights
+
+Two additional transformations, Gamma Correction and Affine misalignment,
+were also implemented and evaluated, but were kept out of the memory bank
+augmentation. They are used exclusively as a held-out test of
+generalization to acquisition conditions the mitigated memory bank was
+never exposed to (see [Robustness Mitigation](#robustness-mitigation)).
 
 These transformations simulate realistic variations in illumination, sensor
-quality, and camera viewpoint without introducing new defects. All
-parameters are randomly sampled within physically motivated ranges for each
-transformation. During domain shift evaluation, the ResNet-50 feature
-extractor, memory bank, and anomaly threshold remain unchanged: no
-additional training or calibration is performed on the shifted images.
-
-A broader set of transforms (gamma correction, JPEG compression, motion and
-defocus blur, vignetting, and specular highlights) was also implemented but
-not included in the final evaluation, since the selected five already cover
-the main sources of domain shift relevant to this scenario.
+quality, camera viewpoint, and surface reflectance, without introducing new
+defects. All parameters are randomly sampled within physically motivated
+ranges for each transformation. Baseline domain shift results use the
+original memory bank and threshold, unchanged from nominal evaluation.
 
 See [Perturbation Details](#perturbation-details) below for the model and
 parameter ranges used for each transformation.
+
+## Robustness Mitigation
+
+To reduce the accuracy and precision drop observed under domain shift,
+particularly for Contrast and Perspective, the memory bank was enriched
+with augmented normal samples. For each of the 176 training images, one
+randomly selected perturbation was applied, and the result was added to
+the memory bank alongside the original, using
+[`augment_train_set.py`](./domain-shift/augment_train_set.py). The anomaly
+threshold was kept unchanged, estimated as before from the clean
+validation set.
+
+Using more than one augmented copy per image (2 or 3) was also tested, but
+consistently reduced performance, likely because a smaller proportion of
+clean normal patches survives the fixed-size random subsampling once the
+source pool grows. One augmentation per image was kept as the final
+configuration.
+
+The validation percentile used to compute the threshold was also varied
+across `{85, 87.5, 90, 92.5, 95}`. Lowering it improved Recall slightly on
+some conditions but reduced Accuracy and Precision across the board,
+including on the original test set. The 90th percentile remained the best
+overall choice.
+
+A second experiment used `augment_train_set.py`'s `AUGMENTATION_SCALE`
+parameter to shrink every transform's range to 60% of its original width
+around the same midpoint, so the memory bank is exposed only to a milder
+version of each perturbation than the one actually used at test time. On
+top of this mildly-augmented memory bank, two further checks were run:
+Gamma Correction and Affine, neither used during augmentation at all, and
+a combined Exposure + Perspective condition, to test generalization beyond
+the transforms and magnitudes seen during mitigation.
+
+### Baseline Results
+
+Six core conditions plus Gamma and Affine (evaluated but not used for
+augmentation). The average row is computed over the six core conditions
+only (Exposure through Specular), so it stays comparable across all three
+tables in this section.
+
+| Condition | Acc. | Prec. | Rec. | F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 91.3% | 96.6% | 92.5% | 94.5% |
+| Exposure | 89.0% | 91.6% | 95.0% | 93.3% |
+| White Balance | 89.0% | 89.6% | 97.5% | 93.4% |
+| Noise | 90.0% | 91.6% | 96.3% | 93.9% |
+| Contrast | 85.0% | 84.2% | 100% | 91.4% |
+| Perspective | 85.0% | 87.4% | 95.0% | 91.0% |
+| Specular | 89.0% | 90.6% | 96.3% | 93.3% |
+| **Average (shifted, 6 core conditions)** | **87.8%** | **89.2%** | **96.7%** | **92.7%** |
+| Gamma *(held out)* | 87.0% | 87.6% | 97.5% | 92.3% |
+| Affine *(held out)* | 83.0% | 82.5% | 100% | 90.4% |
+
+Contrast and Perspective show the largest drops in Accuracy and Precision
+compared with the nominal condition.
+
+### Results After Full-Range Augmentation
+
+Memory bank augmented using the same parameter ranges as the test
+conditions (`AUGMENTATION_SCALE = 1.0`).
+
+| Condition | Acc. | Prec. | Rec. | F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 93.0% | 98.9% | 92.5% | 95.6% |
+| Exposure | 89.0% | 92.6% | 93.8% | 93.2% |
+| White Balance | 93.0% | 97.4% | 93.8% | 95.5% |
+| Noise | 92.0% | 97.4% | 92.5% | 94.9% |
+| Contrast | 94.0% | 95.1% | 97.5% | 96.3% |
+| Perspective | 91.0% | 97.3% | 91.3% | 94.2% |
+| Specular | 91.0% | 96.1% | 92.5% | 94.3% |
+| **Average (shifted)** | **91.7%** | **96.0%** | **93.6%** | **94.7%** |
+
+Average Accuracy increases from 87.8% to 91.7%, Precision from 89.2% to
+96.0%, and F1-score from 92.7% to 94.7%. Recall decreases slightly from
+96.7% to 93.6%, indicating a trade-off between anomaly detection and
+false-positive reduction. Contrast and Perspective, the weakest conditions
+before mitigation, improve the most.
+
+### Results After Mild (0.6) Augmentation and Generalization Test
+
+Memory bank augmented using only 60% of each transform's original range
+(`AUGMENTATION_SCALE = 0.6`), leaving the outer 40% of every range genuinely
+unseen during training. Gamma, Affine, and the combined Exposure +
+Perspective condition were never used for augmentation at all, and are
+included here purely as a generalization check. The average row is
+computed over the same six core conditions as the other two tables.
+
+| Condition | Acc. | Prec. | Rec. | F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 92.2% | 97.7% | 92.5% | 95.0% |
+| Exposure | 90.0% | 92.6% | 93.8% | 93.2% |
+| White Balance | 93.0% | 96.1% | 91.3% | 93.6% |
+| Noise | 88.0% | 97.2% | 87.5% | 92.1% |
+| Contrast | 92.0% | 90.9% | 100% | 95.2% |
+| Perspective | 90.0% | 96.1% | 91.3% | 93.6% |
+| Specular | 94.0% | 97.4% | 95.0% | 96.2% |
+| **Average (shifted, 6 core conditions)** | **91.2%** | **95.1%** | **93.2%** | **94.0%** |
+| Gamma Correction *(held out)* | 86.0% | 92.3% | 90.0% | 91.1% |
+| Affine *(held out)* | 87.0% | 86.8% | 98.8% | 92.4% |
+| Exposure + Perspective *(held out, combined)* | 87.7% | 87.5% | 94.6% | 90.9% |
+
+Using only 60% of the original range for augmentation recovers most of the
+robustness improvement seen with full-range augmentation (average F1
+94.0% versus 94.7%), while training on a narrower, genuinely different
+distribution than the one evaluated at test time. The held-out results are
+mixed: Affine improves over its unmitigated baseline (F1 90.4% → 92.4%),
+while Gamma stays close to its baseline (F1 92.3% → 91.1%). This indicates
+that memory bank augmentation can generalize to unseen acquisition
+conditions, but not uniformly across all of them.
+
+Increasing the number of augmented copies per image (2 or 3) was also
+tested here and, as with full-range augmentation, consistently reduced
+performance, so a single augmented copy per image was kept as the final
+configuration.
 
 ## Repository Structure
 
@@ -74,7 +218,8 @@ anomaly-detection-domain-shift/
 │
 ├── domain-shift/
 │   ├── domain_shift_functions.py
-│   └── domain_shift_test_set.py
+│   ├── domain_shift_test_set.py
+│   └── augment_train_set.py
 │
 └── README.md
 ```
@@ -93,7 +238,14 @@ Main notebook containing the anomaly detection pipeline:
 
 ### `domain-shift/`
 
-Contains the functions used to generate modified versions of the test set and evaluate the system under domain shift.
+Contains the functions used to generate modified versions of the test set
+and evaluate the system under domain shift
+(`domain_shift_functions.py`, `domain_shift_test_set.py`), along with the
+script used to build an augmented pool of normal training images for the
+robustness mitigation experiment (`augment_train_set.py`). The latter
+supports an `AUGMENTATION_SCALE` parameter to shrink or expand the
+perturbation ranges used for augmentation relative to the ones used at
+test time.
 
 ## Requirements
 
@@ -144,6 +296,10 @@ On the original `metal_nut` test set, the final configuration achieved:
 
 The system also generates anomaly heatmaps that highlight the regions most strongly associated with detected defects.
 
+Robustness under realistic acquisition variations, and the mitigation
+applied to improve it, is covered separately in
+[Robustness Mitigation](#robustness-mitigation).
+
 ## Perturbation Details
 
 Each perturbation is implemented as a physically motivated transformation,
@@ -191,18 +347,39 @@ rather than an arbitrary distortion. Reproduces a camera remounted with a
 slight tilt after maintenance, or a fixture that is not perfectly level.
 **Range:** pitch, roll `∈ [-15°, 15°]`, sampled independently
 
-### Other implemented transforms (not evaluated)
+### Specular Highlights
 
-* **Gamma correction** — reproduces a misconfigured or replaced camera with
-  a different tone curve.
-* **JPEG compression** — reproduces bandwidth-limited camera links or
+Adds a synthetic glare hotspot as a 2D Gaussian, blended additively so it
+only ever adds light, never removes it. Constrained to the inner region of
+the image, with independently sampled radii for a slightly elliptical
+shape. Reproduces glare on glossy metal surfaces, relevant for `metal_nut`
+and other reflective MVTec categories.
+**Range:** hotspot radius `∈ [0.05, 0.25]` of image size, brightness `∈ [80, 220]`
+
+### Held-out transforms (evaluated, not used for memory bank augmentation)
+
+* **Gamma correction** - `new_pixel = 255 * (old_pixel / 255) ^ gamma`,
+  reproducing a misconfigured or replaced camera with a different tone
+  curve. **Range:** `gamma ∈ [0.45, 2.2]`
+* **Affine misalignment** - translation, rotation, and shear around the
+  image center, reproducing imperfect part placement on the inspection
+  fixture or a camera that shifted between calibration and deployment.
+  **Range:** translation `∈ [-40, 40]` px, rotation `∈ [-25°, 25°]`,
+  shear `∈ [-0.08, 0.08]`
+
+These two, plus a combined Exposure + Perspective condition, are used only
+as a held-out generalization test after mitigation (see
+[Robustness Mitigation](#robustness-mitigation)); they were never used to
+build the augmented memory bank.
+
+### Other implemented transforms (not evaluated at all)
+
+* **JPEG compression** - reproduces bandwidth-limited camera links or
   on-device compression.
-* **Blur (motion + defocus)** — reproduces vibration during exposure or
+* **Blur (motion + defocus)** - reproduces vibration during exposure or
   object height variation on the conveyor.
-* **Vignetting** — reproduces uneven lens illumination toward the image
+* **Vignetting** - reproduces uneven lens illumination toward the image
   borders.
-* **Specular highlights** — reproduce glare on glossy metal surfaces,
-  relevant for `metal_nut` and similar reflective categories.
 
 ## Authors
 
@@ -225,7 +402,7 @@ This project builds on the following external resources:
   (Apache-2.0).
 * **Domain shift evaluation**: perturbation design informed by [5].
 
-[1] P. Bergmann, M. Fauser, D. Sattlegger, and C. Steger. *MVTec AD — A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection.* CVPR, 2019.
+[1] P. Bergmann, M. Fauser, D. Sattlegger, and C. Steger. *MVTec AD - A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection.* CVPR, 2019.
 [2] K. He, X. Zhang, S. Ren, and J. Sun. *Deep Residual Learning for Image Recognition.* CVPR, 2016.
 [3] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. *ImageNet: A Large-Scale Hierarchical Image Database.* CVPR, 2009.
 [4] K. Roth, L. Pemula, J. Zepeda, B. Schölkopf, T. Brox, and P. Gehler. *Towards Total Recall in Industrial Anomaly Detection.* CVPR, 2022.
